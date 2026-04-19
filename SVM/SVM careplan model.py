@@ -12,9 +12,9 @@ from sklearn.metrics import (
 )
 
 # SETTINGS
-CSV_PATH        = "meta_dataset_ml_ready.csv"
-FEATURE_COLS_PATH  = "feature_cols.pkl"
-CAREPLAN_COLS_PATH = "careplan_cols.pkl"
+CSV_PATH        = "Code/meta_dataset_ml_ready.csv"
+FEATURE_COLS_PATH  = "Code/feature_cols.pkl"
+CAREPLAN_COLS_PATH = "Code/careplan_cols.pkl"
 
 MIN_PATHOLOGY_COUNT = 2
 TEST_SIZE           = 0.20
@@ -122,7 +122,6 @@ print(f"Best CV F1  : {grid_search.best_score_:.4f}")
 
 best_svm = grid_search.best_estimator_
 
-# ============================================================
 # EVALUATE TUNED MODEL ON HELD-OUT TEST SET
 # ============================================================
 print("\n" + "=" * 60)
@@ -158,6 +157,42 @@ print(classification_report(
     zero_division=0,
 ))
 
+# Confusion Matrix 
+# ============================================================
+import matplotlib
+matplotlib.use("Agg")          # use non-interactive backend (works in scripts & Jupyter)
+import matplotlib.pyplot as plt
+from sklearn.metrics import ConfusionMatrixDisplay
+ 
+# Shorten long disease names so they fit on the plot axes
+def shorten_label(label):
+    replacements = [
+        (" (disorder)", ""),
+        ("localized  primary ", "loc. "),
+        ("overlapping malignant ", "overlap. malig. "),
+        ("familial alzheimer's disease of early onset", "familial AD early onset"),
+        ("chronic congestive heart failure", "chr. CHF"),
+        ("chronic obstructive bronchitis", "chr. obstr. bronchitis"),
+    ]
+    for old, new in replacements:
+        label = label.replace(old, new)
+    return label
+ 
+short_names = [shorten_label(n) for n in present_names]
+ 
+cm = confusion_matrix(y_test, y_pred, labels=present_labels)
+ 
+fig, ax = plt.subplots(figsize=(13, 10))
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=short_names)
+disp.plot(ax=ax, colorbar=True, cmap="Blues", xticks_rotation=45)
+ax.set_title(
+    "SVM Confusion Matrix — Pathology Classification\n"
+    f"(Best params: RBF kernel, C=10, gamma=auto  |  Accuracy: {tuned_acc:.2%})",
+    fontsize=12, fontweight="bold", pad=15
+)
+plt.tight_layout()
+plt.savefig("svm_confusion_matrix.png", dpi=150, bbox_inches="tight")
+print("\nConfusion matrix saved → svm_confusion_matrix.png")
 
 # STEP 7: CAREPLAN RECOMMENDATION LOGIC (TWO-STAGE)
 print("=" * 60)
