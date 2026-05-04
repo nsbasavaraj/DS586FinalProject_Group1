@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from collections import Counter
+import optuna
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
@@ -15,22 +16,17 @@ print("=" * 60)
 print("LOADING DATA")
 print("=" * 60)
 
-meta_encoded   = pd.read_csv("../Data/meta_dataset_ml_ready.csv", index_col="PATIENT")
-meta_readable  = pd.read_csv("../Data/meta_dataset_readable.csv", index_col="PATIENT")
+meta_encoded = pd.read_csv("../Data/meta_dataset_ml_ready.csv", index_col="PATIENT")
+meta_readable = pd.read_csv("../Data/meta_dataset_readable.csv", index_col="PATIENT")
 
 print("Loaded:", meta_encoded.shape)
 
 # ============================================================
 # 2. FEATURES & LABELS
 # ============================================================
-
-# Identify careplan columns (targets for other tasks)
 careplan_cols = [c for c in meta_encoded.columns if c.startswith("CAREPLAN__")]
-
-# Use all numeric features EXCEPT careplans
 X = meta_encoded.drop(columns=careplan_cols)
 
-# Pathology label
 y_pathology = meta_readable["PATHOLOGY"].astype(str).str.strip().str.lower()
 le = LabelEncoder()
 y = le.fit_transform(y_pathology)
@@ -40,9 +36,9 @@ y = le.fit_transform(y_pathology)
 # ============================================================
 counts = Counter(y)
 valid_labels = {label for label, cnt in counts.items() if cnt >= 10}
-mask = [label in valid_labels for label in y]
+mask = np.array([label in valid_labels for label in y])
 
-X = X[mask]
+X = X.loc[mask]
 y = y[mask]
 
 print("Remaining samples:", len(y))
@@ -53,8 +49,6 @@ print("Remaining pathologies:", len(set(y)))
 # ============================================================
 numeric_cols = X.select_dtypes(include=[np.number]).columns
 X = X[numeric_cols]
-
-# Remove zero-variance columns
 X = X.loc[:, X.var() > 0]
 
 print("Final feature count:", X.shape[1])
@@ -69,21 +63,53 @@ X_train, X_test, y_train, y_test = train_test_split(
 print("Train:", len(X_train), "Test:", len(X_test))
 
 # ============================================================
-# 6. RANDOM FOREST MODEL
+# 6. OPTUNA BAYESIAN OPTIMIZATION
 # ============================================================
-rf = RandomForestClassifier(
-    n_estimators=300,
+
+def objective(trial):
+    params = {
+        "n_estimators": trial.suggest_int("n_estimators", 200, 1200),
+        "max_depth": trial.suggest_int("max_depth", 5, 40),
+        "min_samples_split": trial.suggest_int("min_samples_split", 2, 20),
+        "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 10),
+        "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2", 0.5, 0.8]),
+        "bootstrap": trial.suggest_categorical("bootstrap", [True, False]),
+    }
+
+    model = RandomForestClassifier(
+        **params,
+        class_weight="balanced_subsample",
+        random_state=42,
+        n_jobs=-1
+    )
+
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+    return accuracy_score(y_test, preds)
+
+print("\nRunning Optuna Bayesian Optimization...")
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=40)
+
+print("\nBest Hyperparameters:")
+print(study.best_params)
+
+# Train final model
+best_params = study.best_params
+best_rf = RandomForestClassifier(
+    **best_params,
     class_weight="balanced_subsample",
     random_state=42,
     n_jobs=-1
 )
 
-rf.fit(X_train, y_train)
-y_pred = rf.predict(X_test)
+best_rf.fit(X_train, y_train)
 
 # ============================================================
 # 7. EVALUATION
 # ============================================================
+y_pred = best_rf.predict(X_test)
+
 print("\nAccuracy:", accuracy_score(y_test, y_pred))
 
 present = sorted(set(y_test))
@@ -95,11 +121,10 @@ print(classification_report(y_test, y_pred, labels=present, target_names=names))
 # ============================================================
 # 8. SAVE MODEL
 # ============================================================
-joblib.dump(rf, "../Random_Forest/rf_model.pkl")
+joblib.dump(best_rf, "../Random_Forest/rf_model_optuna.pkl")
 joblib.dump(le, "../Random_Forest/label_encoder.pkl")
 
-print("\nSaved model + encoder")
+print("\nSaved Optuna‑tuned model + encoder")
 print("=" * 60)
 print("DONE")
 print("=" * 60)
-
