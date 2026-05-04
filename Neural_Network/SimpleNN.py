@@ -9,7 +9,7 @@ import torch.optim as optim
 # ----------------------------
 # 1. Load dataset
 # ----------------------------
-df = pd.read_csv("meta_dataset_ml_ready.csv")
+df = pd.read_csv("../Code/meta_dataset_ml_ready.csv")
 
 # Clean column names
 df.columns = df.columns.str.strip().str.lower()
