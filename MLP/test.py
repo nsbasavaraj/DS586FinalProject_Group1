@@ -6,9 +6,9 @@ from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 
-from Code.MLP.model import DualDataset, DualHeadMLP
+from model import DualDataset, DualHeadMLP
 
-CSV_PATH = "meta_dataset_ml_ready.csv"
+CSV_PATH = "../Code/meta_dataset_ml_ready.csv"
 MODEL_PATH = "dual_model.pt"
 
 MIN_PATHOLOGY_COUNT = 2

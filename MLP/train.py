@@ -10,14 +10,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader
 
-from MLP.model import DualDataset, DualHeadMLP
+from model import DualDataset, DualHeadMLP
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # =========================================================
 # SETTINGS
 # =========================================================
-CSV_PATH = "meta_dataset_ml_ready.csv"
+CSV_PATH = "../Code/meta_dataset_ml_ready.csv"
 MODEL_PATH = "dual_model.pt"
 
 MIN_PATHOLOGY_COUNT = 2
