@@ -1,4 +1,3 @@
-"""
 import os
 import warnings
 
@@ -7,10 +6,11 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
+
+from MLP.model import DualDataset, DualHeadMLP
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -24,8 +24,9 @@ MIN_PATHOLOGY_COUNT = 2
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 BATCH_SIZE = 32
-NUM_EPOCHS = 25
+NUM_EPOCHS = 40
 LEARNING_RATE = 1e-3
+WEIGHT_DECAY = 1e-4
 
 # =========================================================
 # LOAD DATA
@@ -84,7 +85,7 @@ y_path = label_encoder.fit_transform(df["PATHOLOGY"].astype(str))
 
 y_care = df[careplan_cols].astype(np.float32).values
 
-# Save metadata for prediction script
+# Save metadata for prediction / test
 joblib.dump(feature_cols, "feature_cols.pkl")
 joblib.dump(careplan_cols, "careplan_cols.pkl")
 joblib.dump(label_encoder, "pathology_label_encoder.pkl")
@@ -110,55 +111,14 @@ print(f"Train shape: {X_train.shape}")
 print(f"Test shape: {X_test.shape}")
 
 # =========================================================
-# DATASET
+# DATASET & DATALOADER
 # =========================================================
-class DualDataset(Dataset):
-    def __init__(self, X_data, y_path_data, y_care_data):
-        self.X = torch.tensor(X_data, dtype=torch.float32)
-        self.y_path = torch.tensor(y_path_data, dtype=torch.long)
-        self.y_care = torch.tensor(y_care_data, dtype=torch.float32)
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.y_path[idx], self.y_care[idx]
-
-
 train_dataset = DualDataset(X_train, y_path_train, y_care_train)
-test_dataset = DualDataset(X_test, y_path_test, y_care_test)
-
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 # =========================================================
 # MODEL
 # =========================================================
-class DualHeadMLP(nn.Module):
-    def __init__(self, input_dim, num_pathologies, num_careplans):
-        super().__init__()
-
-        self.shared = nn.Sequential(
-            nn.Linear(input_dim, 256),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-        )
-
-        self.pathology_head = nn.Linear(64, num_pathologies)
-        self.careplan_head = nn.Linear(64, num_careplans)
-
-    def forward(self, x):
-        shared_features = self.shared(x)
-        pathology_logits = self.pathology_head(shared_features)
-        careplan_logits = self.careplan_head(shared_features)
-        return pathology_logits, careplan_logits
-
-
 device = torch.device("cpu")
 print(f"Using device: {device}")
 
@@ -170,7 +130,17 @@ model = DualHeadMLP(
 
 pathology_loss_fn = nn.CrossEntropyLoss()
 careplan_loss_fn = nn.BCEWithLogitsLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=LEARNING_RATE,
+    weight_decay=WEIGHT_DECAY,
+)
+
+# Optional scheduler (simple cosine)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer, T_max=NUM_EPOCHS
+)
 
 # =========================================================
 # TRAINING
@@ -203,6 +173,9 @@ for epoch in range(NUM_EPOCHS):
         epoch_path_loss += loss_path.item()
         epoch_care_loss += loss_care.item()
 
+    if scheduler is not None:
+        scheduler.step()
+
     avg_total_loss = epoch_total_loss / len(train_loader)
     avg_path_loss = epoch_path_loss / len(train_loader)
     avg_care_loss = epoch_care_loss / len(train_loader)
@@ -223,90 +196,4 @@ print(f"\nSaved model to {MODEL_PATH}")
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model was not saved: {MODEL_PATH}")
 
-# =========================================================
-# EVALUATION
-# =========================================================
-model.eval()
-
-all_path_true = []
-all_path_pred = []
-all_path_top3 = []
-
-all_care_true = []
-all_care_pred = []
-
-with torch.no_grad():
-    for xb, yb_path, yb_care in test_loader:
-        xb = xb.to(device)
-
-        path_logits, care_logits = model(xb)
-
-        # Pathology predictions
-        path_probs = torch.softmax(path_logits, dim=1).cpu().numpy()
-        path_pred = np.argmax(path_probs, axis=1)
-        top3_idx = np.argsort(path_probs, axis=1)[:, -3:][:, ::-1]
-
-        # Careplan predictions
-        care_probs = torch.sigmoid(care_logits).cpu().numpy()
-        care_pred = (care_probs >= 0.5).astype(int)
-
-        all_path_true.extend(yb_path.numpy())
-        all_path_pred.extend(path_pred.tolist())
-        all_path_top3.extend(top3_idx.tolist())
-
-        all_care_true.append(yb_care.numpy())
-        all_care_pred.append(care_pred)
-
-all_care_true = np.vstack(all_care_true)
-all_care_pred = np.vstack(all_care_pred)
-
-# Pathology metrics
-path_acc = accuracy_score(all_path_true, all_path_pred)
-path_f1 = f1_score(all_path_true, all_path_pred, average="weighted")
-
-top3_correct = 0
-for true_label, top3 in zip(all_path_true, all_path_top3):
-    if true_label in top3:
-        top3_correct += 1
-top3_acc = top3_correct / len(all_path_true)
-
-# Careplan metrics
-care_exact_match_acc = np.mean(np.all(all_care_true == all_care_pred, axis=1))
-care_element_acc = np.mean(all_care_true == all_care_pred)
-
-care_f1_scores = []
-for i in range(len(all_care_true)):
-    true_i = all_care_true[i]
-    pred_i = all_care_pred[i]
-
-    tp = np.sum((true_i == 1) & (pred_i == 1))
-    fp = np.sum((true_i == 0) & (pred_i == 1))
-    fn = np.sum((true_i == 1) & (pred_i == 0))
-
-    if tp == 0 and fp == 0 and fn == 0:
-        f1_i = 1.0
-    elif tp == 0:
-        f1_i = 0.0
-    else:
-        precision_i = tp / (tp + fp)
-        recall_i = tp / (tp + fn)
-        f1_i = 2 * precision_i * recall_i / (precision_i + recall_i)
-
-    care_f1_scores.append(f1_i)
-
-care_sample_f1 = float(np.mean(care_f1_scores))
-
-# =========================================================
-# PRINT RESULTS
-# =========================================================
-print("\n===== TEST RESULTS =====")
-print(f"Pathology Accuracy: {path_acc:.4f}")
-print(f"Pathology Weighted F1: {path_f1:.4f}")
-print(f"Pathology Top-3 Accuracy: {top3_acc:.4f}")
-print(f"Careplan Exact Match Accuracy: {care_exact_match_acc:.4f}")
-print(f"Careplan Element-wise Accuracy: {care_element_acc:.4f}")
-print(f"Careplan Sample-wise F1: {care_sample_f1:.4f}")
-
-print("\nDone.")
-
-"""
+print("Done training.")
