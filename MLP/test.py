@@ -6,6 +6,9 @@ from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from sklearn.metrics import classification_report
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
 
 from model import DualDataset, DualHeadMLP
 
@@ -126,5 +129,80 @@ print(classification_report(
     all_path_pred,
     target_names=label_encoder.classes_
 ))
+
+#per-class fl score plot
+report = classification_report(
+    all_path_true,
+    all_path_pred,
+    target_names=label_encoder.classes_,
+    output_dict=True
+)
+
+
+df_report = pd.DataFrame(report).T
+
+df_report = df_report.iloc[:-3]  # remove avg rows
+df_report = df_report.sort_values("f1-score")
+
+plt.figure(figsize=(10, 6))
+plt.barh(
+    [l.replace(" (disorder)", "") for l in df_report.index],
+    df_report["f1-score"]
+)
+
+plt.xlabel("F1 Score")
+plt.title("Per-Disease F1 Score")
+plt.xlim(0, 1)
+
+plt.tight_layout()
+plt.savefig("per_class_f1.png", dpi=300)
+plt.show()
+
+
+# confusion matrix plot
+cm = confusion_matrix(all_path_true, all_path_pred)
+
+plt.figure(figsize=(12, 10))
+sns.heatmap(
+    cm,
+    cmap="Blues",
+    xticklabels=[l.replace(" (disorder)", "") for l in label_encoder.classes_],
+    yticklabels=[l.replace(" (disorder)", "") for l in label_encoder.classes_],
+)
+
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.title("Pathology Confusion Matrix")
+plt.xticks(rotation=90)
+plt.yticks(rotation=0)
+
+plt.tight_layout()
+plt.savefig("confusion_matrix.png", dpi=300)
+plt.show()
+
+
+#top-3 vs. top-1 performance plot
+metrics = {
+    "Top-1 Accuracy": 0.8517,
+    "Top-3 Accuracy": 0.9994
+}
+
+# care-plan performance breakdown
+metrics = {
+    "Exact Match": 0.9873,
+    "Element-wise": 0.9988,
+    "Sample F1": 0.9958
+}
+
+plt.figure(figsize=(6, 4))
+plt.bar(metrics.keys(), metrics.values())
+
+plt.ylabel("Score")
+plt.title("Care Plan Prediction Performance")
+plt.ylim(0.95, 1.0)
+
+plt.tight_layout()
+plt.savefig("careplan_performance.png", dpi=300)
+plt.show()
 
 print("\nDone.")
