@@ -213,3 +213,21 @@ plt.savefig("careplan_performance.png", dpi=300)
 plt.show()
 
 print("\nDone.")
+
+
+model_name = "DualHeadMLP"  # change this for each folder/model
+
+results = {
+    "model": model_name,
+    "pathology_accuracy": path_acc,
+    "pathology_weighted_f1": path_f1,
+    "pathology_top3_accuracy": top3_acc,
+    "careplan_exact_match": care_exact_match_acc,
+    "careplan_element_accuracy": care_element_acc,
+    "careplan_sample_f1": care_sample_f1,
+}
+
+results_df = pd.DataFrame([results])
+results_df.to_csv("model_results.csv", index=False)
+
+print("\nSaved results to model_results.csv")

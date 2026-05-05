@@ -1,6 +1,10 @@
 import joblib
 import numpy as np
 import torch
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score, classification_report, f1_score
 from torch.utils.data import DataLoader
 
@@ -110,6 +114,91 @@ def test_model():
             zero_division=0,
         )
     )
+
+
+    # =========================================================
+    # CONFUSION MATRIX
+    # =========================================================
+    cm = confusion_matrix(all_path_true, all_path_pred)
+
+    plt.figure(figsize=(10, 8))
+
+    ax = sns.heatmap(
+        cm,
+        cmap="Blues",
+        cbar=True,
+        xticklabels=[l.replace(" (disorder)", "") for l in label_encoder.classes_],
+        yticklabels=[l.replace(" (disorder)", "") for l in label_encoder.classes_],
+    )
+
+    # Bigger colorbar font
+    cbar = ax.collections[0].colorbar
+    cbar.ax.tick_params(labelsize=12)
+
+    plt.xlabel("Predicted Label", fontsize=12)
+    plt.ylabel("True Label", fontsize=12)
+    plt.title("Autoencoder Pathology Confusion Matrix", fontsize=14)
+
+    plt.tight_layout()
+    plt.savefig("ae_confusion_matrix.png", dpi=300)
+    plt.show()
+
+
+    # =========================================================
+    # PER-DISEASE F1 SCORES
+    # =========================================================
+    report = classification_report(
+        all_path_true,
+        all_path_pred,
+        target_names=label_encoder.classes_,
+        output_dict=True,
+        zero_division=0,
+    )
+
+    df_report = pd.DataFrame(report).T
+
+    # Remove avg rows
+    df_report = df_report.iloc[:-3]
+
+    # Remove zero-F1 diseases
+    df_report = df_report[df_report["f1-score"] > 0]
+
+    # Sort
+    df_report = df_report.sort_values("f1-score")
+
+    # Clean labels
+    labels = [l.replace(" (disorder)", "") for l in df_report.index]
+
+    plt.figure(figsize=(10, 6))
+
+    plt.barh(labels, df_report["f1-score"])
+
+    plt.xlabel("F1 Score", fontsize=12)
+    plt.title("Autoencoder Per-Disease F1 Scores", fontsize=14)
+
+    plt.xlim(0, 1)
+
+    plt.tight_layout()
+    plt.savefig("ae_per_class_f1.png", dpi=300)
+    plt.show()
+
+    model_name = "Autoencoder"  # change this for each folder/model
+
+    results = {
+        "model": model_name,
+        "pathology_accuracy": path_acc,
+        "pathology_weighted_f1": path_f1,
+        "pathology_top3_accuracy": top3_acc,
+        "careplan_exact_match": care_exact_match_acc,
+        "careplan_element_accuracy": care_element_acc,
+        "careplan_sample_f1": care_sample_f1,
+    }
+
+    results_df = pd.DataFrame([results])
+    results_df.to_csv("model_results.csv", index=False)
+
+    print("\nSaved results to model_results.csv") 
+
 
 
 if __name__ == "__main__":

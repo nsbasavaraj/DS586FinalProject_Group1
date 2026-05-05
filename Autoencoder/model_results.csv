@@ -1,0 +1,2 @@
+model,pathology_accuracy,pathology_weighted_f1,pathology_top3_accuracy,careplan_exact_match,careplan_element_accuracy,careplan_sample_f1
+Autoencoder,0.8494623655913979,0.8088380175566077,1.0,0.9864010120177104,0.9987637283652464,0.9948344929369597
