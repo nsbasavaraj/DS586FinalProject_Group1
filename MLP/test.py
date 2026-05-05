@@ -5,15 +5,11 @@ import torch
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
+from sklearn.metrics import classification_report
 
 from model import DualDataset, DualHeadMLP
 
-CSV_PATH = "../Code/meta_dataset_ml_ready.csv"
 MODEL_PATH = "dual_model.pt"
-
-MIN_PATHOLOGY_COUNT = 2
-TEST_SIZE = 0.2
-RANDOM_STATE = 42
 BATCH_SIZE = 32
 
 # =========================================================
@@ -26,24 +22,9 @@ label_encoder = joblib.load("pathology_label_encoder.pkl")
 # =========================================================
 # LOAD DATA
 # =========================================================
-df = pd.read_csv(CSV_PATH)
-
-path_counts = df["PATHOLOGY"].value_counts()
-valid_pathologies = path_counts[path_counts >= MIN_PATHOLOGY_COUNT].index
-df = df[df["PATHOLOGY"].isin(valid_pathologies)].copy()
-
-X = df[feature_cols].astype(np.float32).values
-y_care = df[careplan_cols].astype(np.float32).values
-y_path = label_encoder.transform(df["PATHOLOGY"].astype(str))
-
-X_train, X_test, y_path_train, y_path_test, y_care_train, y_care_test = train_test_split(
-    X,
-    y_path,
-    y_care,
-    test_size=TEST_SIZE,
-    random_state=RANDOM_STATE,
-    stratify=y_path,
-)
+X_test = np.load("X_test.npy")
+y_path_test = np.load("y_path_test.npy")
+y_care_test = np.load("y_care_test.npy")
 
 test_dataset = DualDataset(X_test, y_path_test, y_care_test)
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
@@ -51,9 +32,9 @@ test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 # =========================================================
 # LOAD MODEL
 # =========================================================
-device = torch.device("cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = DualHeadMLP(
-    input_dim=X.shape[1],
+    input_dim=X_test.shape[1],
     num_pathologies=len(label_encoder.classes_),
     num_careplans=len(careplan_cols),
 ).to(device)
@@ -139,5 +120,11 @@ print(f"Pathology Top-3 Accuracy: {top3_acc:.4f}")
 print(f"Careplan Exact Match Accuracy: {care_exact_match_acc:.4f}")
 print(f"Careplan Element-wise Accuracy: {care_element_acc:.4f}")
 print(f"Careplan Sample-wise F1: {care_sample_f1:.4f}")
+
+print(classification_report(
+    all_path_true,
+    all_path_pred,
+    target_names=label_encoder.classes_
+))
 
 print("\nDone.")
