@@ -26,7 +26,7 @@ MIN_PATHOLOGY_COUNT = 5
 RANDOM_STATE = 42
 
 BATCH_SIZE = 32
-NUM_EPOCHS = 40
+NUM_EPOCHS = 50
 LEARNING_RATE = 5.575e-4
 WEIGHT_DECAY = 7.633e-05
 
@@ -168,7 +168,7 @@ optimizer = torch.optim.AdamW(
     weight_decay=WEIGHT_DECAY,
 )
 
-# Optional scheduler (simple cosine)
+# scheduler (simple cosine)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
     optimizer, T_max=NUM_EPOCHS
 )

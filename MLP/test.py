@@ -142,6 +142,7 @@ report = classification_report(
 df_report = pd.DataFrame(report).T
 
 df_report = df_report.iloc[:-3]  # remove avg rows
+df_report = df_report[df_report["f1-score"] > 0]
 df_report = df_report.sort_values("f1-score")
 
 plt.figure(figsize=(10, 6))
@@ -151,7 +152,7 @@ plt.barh(
 )
 
 plt.xlabel("F1 Score")
-plt.title("Per-Disease F1 Score")
+plt.title("Per-Disease F1 Score", fontsize=18)
 plt.xlim(0, 1)
 
 plt.tight_layout()
@@ -163,18 +164,24 @@ plt.show()
 cm = confusion_matrix(all_path_true, all_path_pred)
 
 plt.figure(figsize=(12, 10))
-sns.heatmap(
+ax = sns.heatmap(
     cm,
     cmap="Blues",
     xticklabels=[l.replace(" (disorder)", "") for l in label_encoder.classes_],
     yticklabels=[l.replace(" (disorder)", "") for l in label_encoder.classes_],
 )
 
-plt.xlabel("Predicted")
-plt.ylabel("Actual")
-plt.title("Pathology Confusion Matrix")
-plt.xticks(rotation=90)
-plt.yticks(rotation=0)
+
+cbar = ax.collections[0].colorbar
+cbar.ax.tick_params(labelsize=20)
+
+plt.xlabel("Predicted", fontsize=20)
+plt.ylabel("Actual", fontsize=20)
+plt.title("Pathology Confusion Matrix", fontsize=25)
+plt.xticks(rotation=45, ha="right", fontsize=12)
+plt.yticks(rotation=0, fontsize=12)
+
+
 
 plt.tight_layout()
 plt.savefig("confusion_matrix.png", dpi=300)
