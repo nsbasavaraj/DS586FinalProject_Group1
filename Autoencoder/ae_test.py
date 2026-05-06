@@ -182,7 +182,7 @@ def test_model():
     plt.savefig("ae_per_class_f1.png", dpi=300)
     plt.show()
 
-    model_name = "Autoencoder"  # change this for each folder/model
+    model_name = "Autoencoder"
 
     results = {
         "model": model_name,

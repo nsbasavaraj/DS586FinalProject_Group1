@@ -16,9 +16,6 @@ from model import DualDataset, DualHeadMLP
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# =========================================================
-# SETTINGS
-# =========================================================
 CSV_PATH = "../Code/meta_dataset_ml_ready_large.csv"
 MODEL_PATH = "dual_model.pt"
 

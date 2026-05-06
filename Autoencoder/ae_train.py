@@ -15,9 +15,6 @@ from ae_model import DualDataset, AutoencoderDualHeadClassifier
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# =========================================================
-# SETTINGS
-# =========================================================
 CSV_PATH = "../Code/meta_dataset_ml_ready_large.csv"
 MODEL_PATH = "ae_dual_model.pt"
 
